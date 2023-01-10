@@ -1,26 +1,56 @@
 package main
 
 import (
-	"encoding/json"
+	"github.com/golang/snappy"
+	"go.buf.build/protocolbuffers/go/prometheus/prometheus"
+	"google.golang.org/protobuf/proto"
+	"io"
 	"log"
 	"net/http"
 )
 
 func main() {
 	handler := http.HandlerFunc(handleRequestSuccess)
-	http.Handle("/test", handler)
+	http.Handle("/", handler)
 	http.ListenAndServe(":8080", nil)
 }
 
 func handleRequestSuccess(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-	resp := make(map[string]string)
-	resp["message"] = "Status OK"
-	jsonResp, err := json.Marshal(resp)
-	if err != nil {
-		log.Fatalf("Err: %s", err)
+	log.Println("request received")
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
-	w.Write(jsonResp)
+
+	writeRequest, err := DecodeWriteRequest(r.Body)
+	if err != nil {
+		log.Printf("error receiving remote write request: %v", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("there were %v time series in the request", len(writeRequest.Timeseries))
+	w.WriteHeader(http.StatusNoContent)
 	return
+}
+
+// DecodeWriteRequest deserialize a compressed remote write request
+func DecodeWriteRequest(r io.Reader) (*prometheus.WriteRequest, error) {
+	compressed, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	reqBuf, err := snappy.Decode(nil, compressed)
+	if err != nil {
+		return nil, err
+	}
+
+	var req prometheus.WriteRequest
+	if err := proto.Unmarshal(reqBuf, &req); err != nil {
+		return nil, err
+	}
+
+	return &req, nil
 }
