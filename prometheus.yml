@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 30s
+remote_write:
+  - name: proxy
+    url: http://localhost:8080
