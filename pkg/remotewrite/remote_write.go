@@ -1,4 +1,4 @@
-package pkg
+package remotewrite
 
 import (
 	"github.com/golang/snappy"

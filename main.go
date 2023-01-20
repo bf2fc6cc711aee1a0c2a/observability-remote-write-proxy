@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
-	"observability-remote-write-proxy/pkg"
+	"observability-remote-write-proxy/pkg/remotewrite"
 )
 
 func main() {
@@ -23,14 +23,14 @@ func handleRequestSuccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeRequest, err := pkg.DecodeWriteRequest(r.Body)
+	writeRequest, err := remotewrite.DecodeWriteRequest(r.Body)
 	if err != nil {
 		log.Printf("error receiving remote write request: %v", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	clusterIDs := pkg.ValidateClusterIDs(writeRequest)
+	clusterIDs := remotewrite.FindClusterIDs(writeRequest)
 	if len(clusterIDs) > 1 {
 		log.Printf("request contains multiple cluster IDs: %v", clusterIDs)
 		w.WriteHeader(http.StatusBadRequest)

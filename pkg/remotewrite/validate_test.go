@@ -1,4 +1,4 @@
-package pkg
+package remotewrite
 
 import (
 	"github.com/onsi/gomega"
@@ -60,7 +60,7 @@ var (
 	}
 )
 
-func TestValidateClusterIDs(t *testing.T) {
+func TestFindClusterIDs(t *testing.T) {
 	type args struct {
 		request *prometheus.WriteRequest
 	}
@@ -113,7 +113,7 @@ func TestValidateClusterIDs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := gomega.NewWithT(t)
-			g.Expect(ValidateClusterIDs(tt.args.request)).To(gomega.Equal(tt.want))
+			g.Expect(FindClusterIDs(tt.args.request)).To(gomega.Equal(tt.want))
 		})
 	}
 }
