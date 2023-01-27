@@ -15,7 +15,6 @@ const (
 )
 
 var (
-	w        http.ResponseWriter
 	PORT     = os.Getenv("PORT")
 	upstream = os.Getenv("UPSTREAM")
 )
@@ -28,21 +27,23 @@ func main() {
 
 	proxy := httputil.ReverseProxy{
 		Director: func(request *http.Request) {
-			err := validateRequest(w, request)
-			if err != nil {
-				request.URL.Path = "/error"
-			} else {
-				request.URL.Scheme = upstreamUrl.Scheme
-				request.Host = upstreamUrl.Host
-				request.URL.Host = upstreamUrl.Host
-				request.URL.Path = upstreamUrl.Path
-				request.Header.Add(prefixHeader, "/")
-			}
+			request.URL.Scheme = upstreamUrl.Scheme
+			request.Host = upstreamUrl.Host
+			request.URL.Host = upstreamUrl.Host
+			request.URL.Path = upstreamUrl.Path
+			request.Header.Add(prefixHeader, "/")
 		},
 	}
 
 	proxy.Transport = http.DefaultTransport
-	http.Handle("/", &proxy)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		err := validateRequest(w, r)
+		if err != nil {
+			w.WriteHeader(http.StatusForbidden)
+		} else {
+			proxy.ServeHTTP(w, r)
+		}
+	})
 	err = http.ListenAndServe(PORT, nil)
 	if err != nil {
 		return
