@@ -21,13 +21,9 @@ func main() {
 	proxy := httputil.ReverseProxy{
 		Director: func(request *http.Request) {
 			request.URL.Scheme = upstreamUrl.Scheme
-			// Set the Host at both request and request.URL objects.
 			request.Host = upstreamUrl.Host
 			request.URL.Host = upstreamUrl.Host
-			// Derive path from the paths of configured URL and request URL.
 			request.URL.Path = upstreamUrl.Path
-			// Add prefix header with value "/", since from a client's perspective
-			// we are forwarding /<anything> to /<cfg.upstream.url.Path>/<anything>.
 			request.Header.Add(prefixHeader, "/")
 		},
 		ErrorHandler: func(writer http.ResponseWriter, request *http.Request, err error) {
@@ -36,7 +32,7 @@ func main() {
 	}
 
 	proxy.Transport = http.DefaultTransport
-
+	http.Handle("/", http.HandlerFunc(handleRequestSuccess))
 	http.Handle("/", &proxy)
 	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
