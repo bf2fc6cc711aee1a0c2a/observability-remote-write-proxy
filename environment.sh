@@ -7,9 +7,6 @@ PROMETHEUS_NAME_PROXY="prometheus_proxy"
 
 PROMETHEUS_PORT=9090
 
-export PORT=8080
-export UPSTREAM="http://localhost:9091/api/v1/write"
-
 RUNTIME="docker"
 OPTS=""
 
@@ -46,12 +43,12 @@ EOF
 
 # start the prometheus container
 echo "starting prometheus container from image $PROMETHEUS_IMAGE"
-$RUNTIME run -d --rm --name $PROMETHEUS_NAME --network=host "$OPTS" -v "$(pwd)"/prometheus.yml:/etc/prometheus/prometheus.yml "$PROMETHEUS_IMAGE" --web.enable-remote-write-receiver --config.file=/etc/prometheus/prometheus.yml &> /dev/null
-PROMETHEUS_CONTAINER=$($RUNTIME ps -f name=$PROMETHEUS_NAME --format "{{.ID}}")
+$RUNTIME run -d --rm --name $PROMETHEUS_NAME --network=host $OPTS -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml $PROMETHEUS_IMAGE --web.enable-remote-write-receiver --config.file=/etc/prometheus/prometheus.yml &> /dev/null
+PROMETHEUS_CONTAINER=`$RUNTIME ps -f name=$PROMETHEUS_NAME --format "{{.ID}}"`
 
-# start the prometheus container for the proxy
-$RUNTIME run -d --rm --name $PROMETHEUS_NAME_PROXY --network=host "$OPTS" -v "$(pwd)"/prometheusProxy.yml:/etc/prometheus/prometheus.yml "$PROMETHEUS_IMAGE" --web.enable-remote-write-receiver --web.listen-address=:9091 --config.file=/etc/prometheus/prometheus.yml &> /dev/null
-PROMETHEUS_CONTAINER_PROXY=$($RUNTIME ps -f name=$PROMETHEUS_NAME_PROXY --format "{{.ID}}")
+echo "starting prometheus container from image $PROMETHEUS_IMAGE"
+$RUNTIME run -d --rm --name $PROMETHEUS_NAME_PROXY --network=host $OPTS -v $(pwd)/prometheusProxy.yml:/etc/prometheus/prometheus.yml $PROMETHEUS_IMAGE --web.enable-remote-write-receiver --web.listen-address=:9091 --config.file=/etc/prometheus/prometheus.yml &> /dev/null
+PROMETHEUS_CONTAINER_PROXY=`$RUNTIME ps -f name=$PROMETHEUS_NAME_PROXY --format "{{.ID}}"`
 
 cleanup() {
   echo "stopping prometheus container $PROMETHEUS_CONTAINER"
