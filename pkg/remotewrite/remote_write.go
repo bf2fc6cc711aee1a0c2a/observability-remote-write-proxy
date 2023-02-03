@@ -5,11 +5,12 @@ import (
 	"go.buf.build/protocolbuffers/go/prometheus/prometheus"
 	"google.golang.org/protobuf/proto"
 	"io"
+	"net/http"
 )
 
 // DecodeWriteRequest deserialize a compressed remote write request
-func DecodeWriteRequest(r io.Reader) (*prometheus.WriteRequest, error) {
-	compressed, err := io.ReadAll(r)
+func DecodeWriteRequest(r *http.Request) (*prometheus.WriteRequest, error) {
+	compressed, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
 	}
