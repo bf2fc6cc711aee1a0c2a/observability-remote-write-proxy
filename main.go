@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/go-oidc"
@@ -20,16 +21,25 @@ import (
 	"net/url"
 	"observability-remote-write-proxy/pkg/authentication"
 	"observability-remote-write-proxy/pkg/remotewrite"
+	"path"
+	"time"
 )
 
 const (
-	prefixHeader = "X-Forwarded-Prefix"
+	prefixHeader        = "X-Forwarded-Prefix"
+	headerAuthorization = "Authorization"
 )
 
 var (
-	proxyListenPort *int
-	proxyForwardUrl *string
-	oidcConfig      authentication.OIDCConfig
+	proxyListenPort          *int
+	proxyForwardUrl          *string
+	tokenVerificationUrl     *string
+	tokenVerificationEnabled *bool
+	oidcConfig               authentication.OIDCConfig
+	httpClient               = http.Client{
+		Transport: http.DefaultTransport,
+		Timeout:   10 * time.Second,
+	}
 )
 
 func populateRequestBody(rw *prometheus.WriteRequest, r *http.Request) error {
@@ -43,6 +53,35 @@ func populateRequestBody(rw *prometheus.WriteRequest, r *http.Request) error {
 	return nil
 }
 
+func getAuthenticationToken(r *http.Request) string {
+	if val, ok := r.Header[headerAuthorization]; ok {
+		return val[0]
+	}
+	return ""
+}
+
+func validateToken(url *url.URL, clusterId string, token string) error {
+	req, err := http.NewRequest(http.MethodPost, url.String(), nil)
+	if err != nil {
+		return err
+	}
+
+	req.URL.Path = path.Join(req.URL.Path, clusterId)
+
+	req.Header.Add(headerAuthorization, token)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("unexpected status code from token verification, got %v", resp.StatusCode))
+	}
+
+	return nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -51,6 +90,14 @@ func main() {
 	upstreamUrl, err := url.Parse(*proxyForwardUrl)
 	if err != nil {
 		panic(err)
+	}
+
+	var parsedTokenVerificationUrl *url.URL
+	if *tokenVerificationEnabled {
+		parsedTokenVerificationUrl, err = url.Parse(*tokenVerificationUrl)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	proxy := httputil.ReverseProxy{
@@ -101,11 +148,25 @@ func main() {
 		log.Printf("remote write request received")
 
 		// validate the cluster ids contained in the remote write request
-		err = remotewrite.ValidateRequest(remoteWriteRequest)
+		clusterId, err := remotewrite.ValidateRequest(remoteWriteRequest)
 		if err != nil {
 			log.Printf("error validating the remote write request: %v", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
+		}
+
+		if *tokenVerificationEnabled {
+			token := getAuthenticationToken(r)
+			if token != "" {
+				err = validateToken(parsedTokenVerificationUrl, clusterId, token)
+				if err != nil {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+			} else {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 		}
 
 		// copy the remote write request back onto the http request
@@ -115,9 +176,7 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-
-		// TODO validate data plane auth token
-
+		
 		// after successful validation, forward the request
 		proxy.ServeHTTP(w, r)
 	})
@@ -132,4 +191,6 @@ func init() {
 	oidcConfig.ClientSecret = flag.String("oidc.clientSecret", "", "service account client secret")
 	oidcConfig.Audience = flag.String("oidc.audience", "", "oid audience")
 	oidcConfig.Enabled = flag.Bool("oidc.enabled", false, "enable oidc authentication")
+	tokenVerificationUrl = flag.String("token.verification.url", "", "url to validate data plane tokens")
+	tokenVerificationEnabled = flag.Bool("token.verification.enabled", false, "enable data plane token verification")
 }

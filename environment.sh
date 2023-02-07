@@ -32,6 +32,10 @@ global:
 remote_write:
   - name: proxy
     url: http://localhost:8080
+    oauth2:
+      client_id: <client_id>
+      client_secret: <client_secret>
+      token_url: <token_url>
 EOF
 
 # Create a basic prometheus config file for the proxy target
@@ -43,12 +47,8 @@ EOF
 
 # start the prometheus container
 echo "starting prometheus container from image $PROMETHEUS_IMAGE"
-$RUNTIME run -d --rm --name $PROMETHEUS_NAME --network=host $OPTS -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml $PROMETHEUS_IMAGE --web.enable-remote-write-receiver --config.file=/etc/prometheus/prometheus.yml &> /dev/null
+$RUNTIME run -d --rm --name $PROMETHEUS_NAME --network=host $OPTS -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml $PROMETHEUS_IMAGE --web.enable-remote-write-receiver --config.file=/etc/prometheus/prometheus.yml
 PROMETHEUS_CONTAINER=`$RUNTIME ps -f name=$PROMETHEUS_NAME --format "{{.ID}}"`
-
-echo "starting prometheus container from image $PROMETHEUS_IMAGE"
-$RUNTIME run -d --rm --name $PROMETHEUS_NAME_PROXY --network=host $OPTS -v $(pwd)/prometheusProxy.yml:/etc/prometheus/prometheus.yml $PROMETHEUS_IMAGE --web.enable-remote-write-receiver --web.listen-address=:9091 --config.file=/etc/prometheus/prometheus.yml &> /dev/null
-PROMETHEUS_CONTAINER_PROXY=`$RUNTIME ps -f name=$PROMETHEUS_NAME_PROXY --format "{{.ID}}"`
 
 cleanup() {
   echo "stopping prometheus container $PROMETHEUS_CONTAINER"
