@@ -6,14 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/coreos/go-oidc"
-	_ "github.com/coreos/go-oidc"
-	"github.com/golang/snappy"
-	"go.buf.build/protocolbuffers/go/prometheus/prometheus"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/clientcredentials"
-	_ "golang.org/x/oauth2/clientcredentials"
-	"google.golang.org/protobuf/proto"
 	"io"
 	"log"
 	"net/http"
@@ -23,6 +15,15 @@ import (
 	"observability-remote-write-proxy/pkg/remotewrite"
 	"path"
 	"time"
+
+	"github.com/coreos/go-oidc"
+	_ "github.com/coreos/go-oidc"
+	"github.com/golang/snappy"
+	"go.buf.build/protocolbuffers/go/prometheus/prometheus"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
+	_ "golang.org/x/oauth2/clientcredentials"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -176,7 +177,7 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		
+
 		// after successful validation, forward the request
 		proxy.ServeHTTP(w, r)
 	})

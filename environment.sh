@@ -50,6 +50,9 @@ echo "starting prometheus container from image $PROMETHEUS_IMAGE"
 $RUNTIME run -d --rm --name $PROMETHEUS_NAME --network=host $OPTS -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml $PROMETHEUS_IMAGE --web.enable-remote-write-receiver --config.file=/etc/prometheus/prometheus.yml
 PROMETHEUS_CONTAINER=`$RUNTIME ps -f name=$PROMETHEUS_NAME --format "{{.ID}}"`
 
+$RUNTIME run -d --rm --name $PROMETHEUS_NAME_PROXY --network=host $OPTS -v $(pwd)/prometheusProxy.yml:/etc/prometheus/prometheus.yml $PROMETHEUS_IMAGE --web.enable-remote-write-receiver --config.file=/etc/prometheus/prometheus.yml
+PROMETHEUS_CONTAINER_PROXY=`$RUNTIME ps -f name=$PROMETHEUS_NAME_PROXY--format "{{.ID}}"`
+
 cleanup() {
   echo "stopping prometheus container $PROMETHEUS_CONTAINER"
   $RUNTIME stop "$PROMETHEUS_CONTAINER" &> /dev/null
