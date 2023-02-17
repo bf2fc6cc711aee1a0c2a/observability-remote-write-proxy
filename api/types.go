@@ -1,9 +1,15 @@
-package authentication
+package api
 
 import (
 	"errors"
 	"net/url"
 )
+
+type ProxyConfig struct {
+	ProxyPort   *int
+	MetricsPort *int
+	ForwardUrl  *string
+}
 
 type OIDCConfig struct {
 	IssuerUrl    *string
@@ -11,6 +17,11 @@ type OIDCConfig struct {
 	ClientSecret *string
 	Audience     *string
 	Enabled      *bool
+}
+
+type TokenVerificationConfig struct {
+	Enabled *bool
+	Url     *string
 }
 
 func (c *OIDCConfig) Validate() {
