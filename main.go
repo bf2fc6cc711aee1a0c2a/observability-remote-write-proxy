@@ -1,197 +1,147 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
-	"io"
+	_ "github.com/coreos/go-oidc"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	_ "github.com/prometheus/client_golang/prometheus/promhttp"
+	_ "golang.org/x/oauth2/clientcredentials"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
-	"observability-remote-write-proxy/pkg/authentication"
+	"observability-remote-write-proxy/api"
+	"observability-remote-write-proxy/pkg/authtoken"
+	"observability-remote-write-proxy/pkg/metrics"
+	"observability-remote-write-proxy/pkg/proxy"
 	"observability-remote-write-proxy/pkg/remotewrite"
-	"path"
-	"time"
-
-	"github.com/coreos/go-oidc"
-	_ "github.com/coreos/go-oidc"
-	"github.com/golang/snappy"
-	"go.buf.build/protocolbuffers/go/prometheus/prometheus"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/clientcredentials"
-	_ "golang.org/x/oauth2/clientcredentials"
-	"google.golang.org/protobuf/proto"
-)
-
-const (
-	prefixHeader        = "X-Forwarded-Prefix"
-	headerAuthorization = "Authorization"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
-	proxyListenPort          *int
-	proxyForwardUrl          *string
-	tokenVerificationUrl     *string
-	tokenVerificationEnabled *bool
-	oidcConfig               authentication.OIDCConfig
-	httpClient               = http.Client{
-		Transport: http.DefaultTransport,
-		Timeout:   10 * time.Second,
-	}
+	proxyConfig             api.ProxyConfig
+	oidcConfig              api.OIDCConfig
+	tokenVerificationConfig api.TokenVerificationConfig
 )
-
-func populateRequestBody(rw *prometheus.WriteRequest, r *http.Request) error {
-	data, err := proto.Marshal(rw)
-	if err != nil {
-		return err
-	}
-	encoded := snappy.Encode(nil, data)
-	body := bytes.NewReader(encoded)
-	r.Body = io.NopCloser(body)
-	return nil
-}
-
-func getAuthenticationToken(r *http.Request) string {
-	if val, ok := r.Header[headerAuthorization]; ok {
-		return val[0]
-	}
-	return ""
-}
-
-func validateToken(url *url.URL, clusterId string, token string) error {
-	req, err := http.NewRequest(http.MethodPost, url.String(), nil)
-	if err != nil {
-		return err
-	}
-
-	req.URL.Path = path.Join(req.URL.Path, clusterId)
-
-	req.Header.Add(headerAuthorization, token)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return errors.New(fmt.Sprintf("unexpected status code from token verification, got %v", resp.StatusCode))
-	}
-
-	return nil
-}
 
 func main() {
 	flag.Parse()
-
 	oidcConfig.Validate()
 
-	upstreamUrl, err := url.Parse(*proxyForwardUrl)
+	upstreamUrl, err := url.Parse(*proxyConfig.ForwardUrl)
+	if err != nil {
+		panic(err)
+	}
+
+	proxy, err := proxy.CreateProxy(upstreamUrl, &oidcConfig)
 	if err != nil {
 		panic(err)
 	}
 
 	var parsedTokenVerificationUrl *url.URL
-	if *tokenVerificationEnabled {
-		parsedTokenVerificationUrl, err = url.Parse(*tokenVerificationUrl)
+	if *tokenVerificationConfig.Enabled {
+		parsedTokenVerificationUrl, err = url.Parse(*tokenVerificationConfig.Url)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	proxy := httputil.ReverseProxy{
-		Director: func(request *http.Request) {
-			request.URL.Scheme = upstreamUrl.Scheme
-			request.Host = upstreamUrl.Host
-			request.URL.Host = upstreamUrl.Host
-			request.URL.Path = upstreamUrl.Path
-			request.Header.Add(prefixHeader, "/")
+	metricsServer := http.Server{
+		Addr:    fmt.Sprintf("0.0.0.0:%v", *proxyConfig.MetricsPort),
+		Handler: promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}),
+	}
+
+	proxyServer := http.Server{
+		Addr: fmt.Sprintf("0.0.0.0:%v", *proxyConfig.ProxyPort),
+		Handler: struct {
+			http.HandlerFunc
+		}{
+			func(w http.ResponseWriter, r *http.Request) {
+				// GET / can be used as live-ness probe
+				if r.Method == http.MethodGet {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+
+				// POST / is the only accepted endpoint for incoming write requests
+				if r.Method != http.MethodPost || r.URL.Path != "/" {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				metrics.IncomingRequestCount.WithLabelValues().Inc()
+
+				// extract the remote write request from the http request
+				remoteWriteRequest, err := remotewrite.DecodeWriteRequest(r)
+				if err != nil {
+					log.Printf("error decoding remote write request: %v", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+
+				// validate the cluster ids contained in the remote write request
+				clusterId, err := remotewrite.ValidateRequest(remoteWriteRequest)
+				if err != nil {
+					log.Printf("error validating the remote write request: %v", err)
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+
+				if *tokenVerificationConfig.Enabled {
+					token := authtoken.GetAuthenticationToken(r)
+					if token != "" {
+						err = authtoken.ValidateToken(parsedTokenVerificationUrl, clusterId, token)
+						if err != nil {
+							w.WriteHeader(http.StatusUnauthorized)
+							return
+						}
+					} else {
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+				}
+
+				// copy the remote write request back onto the http request
+				err = remotewrite.PopulateRequestBody(remoteWriteRequest, r)
+				if err != nil {
+					log.Printf("error copying remote write request: %v", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+
+				// after successful validation, forward the request
+				proxy.ServeHTTP(w, r)
+			},
 		},
 	}
 
-	if *oidcConfig.Enabled {
-		provider, err := oidc.NewProvider(context.Background(), *oidcConfig.IssuerUrl)
-		if err != nil {
-			panic(err)
-		}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE, syscall.SIGABRT)
+	defer stop()
 
-		var cfg = clientcredentials.Config{
-			ClientID:     *oidcConfig.ClientId,
-			ClientSecret: *oidcConfig.ClientSecret,
-			TokenURL:     provider.Endpoint().TokenURL,
-		}
+	// metrics server
+	log.Println(fmt.Sprintf("metrics server listening on 0.0.0.0:%v", *proxyConfig.MetricsPort))
+	go metricsServer.ListenAndServe()
+	defer metricsServer.Shutdown(ctx)
 
-		if *oidcConfig.Audience != "" {
-			cfg.EndpointParams = map[string][]string{
-				"audience": {*oidcConfig.Audience},
-			}
-		}
-
-		proxy.Transport = &oauth2.Transport{
-			Source: cfg.TokenSource(context.Background()),
-			Base:   http.DefaultTransport,
-		}
-	} else {
-		proxy.Transport = http.DefaultTransport
-	}
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// extract the remote write request from the http request
-		remoteWriteRequest, err := remotewrite.DecodeWriteRequest(r)
-		if err != nil {
-			log.Printf("error decoding remote write request: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		log.Printf("remote write request received")
-
-		// validate the cluster ids contained in the remote write request
-		clusterId, err := remotewrite.ValidateRequest(remoteWriteRequest)
-		if err != nil {
-			log.Printf("error validating the remote write request: %v", err)
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		if *tokenVerificationEnabled {
-			token := getAuthenticationToken(r)
-			if token != "" {
-				err = validateToken(parsedTokenVerificationUrl, clusterId, token)
-				if err != nil {
-					w.WriteHeader(http.StatusUnauthorized)
-					return
-				}
-			} else {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
-		// copy the remote write request back onto the http request
-		err = populateRequestBody(remoteWriteRequest, r)
-		if err != nil {
-			log.Printf("error copying remote write request: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		// after successful validation, forward the request
-		proxy.ServeHTTP(w, r)
-	})
-	http.ListenAndServe(fmt.Sprintf(":%v", *proxyListenPort), nil)
+	// proxy server
+	log.Println(fmt.Sprintf("proxy server listening on 0.0.0.0:%v", *proxyConfig.ProxyPort))
+	go proxyServer.ListenAndServe()
+	defer proxyServer.Shutdown(ctx)
+	<-ctx.Done()
 }
 
 func init() {
-	proxyListenPort = flag.Int("proxy.listen.port", 8080, "port on which the proxy listens for incoming requests")
-	proxyForwardUrl = flag.String("proxy.forwardUrl", "", "url to forward requests to")
+	proxyConfig.ProxyPort = flag.Int("proxy.listen.port", 8080, "port on which the proxy listens for incoming requests")
+	proxyConfig.MetricsPort = flag.Int("proxy.metrics.port", 9090, "port on which proxy metrics are exposed")
+	proxyConfig.ForwardUrl = flag.String("proxy.forwardUrl", "", "url to forward requests to")
 	oidcConfig.IssuerUrl = flag.String("oidc.issuerUrl", "", "token issuer url")
 	oidcConfig.ClientId = flag.String("oidc.clientId", "", "service account client id")
 	oidcConfig.ClientSecret = flag.String("oidc.clientSecret", "", "service account client secret")
 	oidcConfig.Audience = flag.String("oidc.audience", "", "oid audience")
 	oidcConfig.Enabled = flag.Bool("oidc.enabled", false, "enable oidc authentication")
-	tokenVerificationUrl = flag.String("token.verification.url", "", "url to validate data plane tokens")
-	tokenVerificationEnabled = flag.Bool("token.verification.enabled", false, "enable data plane token verification")
+	tokenVerificationConfig.Url = flag.String("token.verification.url", "", "url to validate data plane tokens")
+	tokenVerificationConfig.Enabled = flag.Bool("token.verification.enabled", false, "enable data plane token verification")
 }
