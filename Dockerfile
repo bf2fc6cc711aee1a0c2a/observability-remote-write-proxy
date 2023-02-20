@@ -11,6 +11,7 @@ RUN go mod download
 
 COPY main.go main.go
 COPY pkg/ pkg/
+COPY api/ api/
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o proxy main.go
 
