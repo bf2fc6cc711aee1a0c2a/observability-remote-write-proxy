@@ -60,8 +60,8 @@ func main() {
 			http.HandlerFunc
 		}{
 			func(w http.ResponseWriter, r *http.Request) {
-				// GET / can be used as live-ness probe
-				if r.Method == http.MethodGet {
+				// GET /healthcheck can be used as readiness probe
+				if r.Method == http.MethodGet && r.URL.Path == "/healthcheck" {
 					w.WriteHeader(http.StatusOK)
 					return
 				}
