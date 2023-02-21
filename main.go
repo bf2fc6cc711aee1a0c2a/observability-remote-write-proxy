@@ -29,7 +29,7 @@ var (
 
 func main() {
 	flag.Parse()
-	oidcConfig.Validate()
+	oidcConfig.ReadAndValidate()
 
 	upstreamUrl, err := url.Parse(*proxyConfig.ForwardUrl)
 	if err != nil {
@@ -137,11 +137,8 @@ func init() {
 	proxyConfig.ProxyPort = flag.Int("proxy.listen.port", 8080, "port on which the proxy listens for incoming requests")
 	proxyConfig.MetricsPort = flag.Int("proxy.metrics.port", 9090, "port on which proxy metrics are exposed")
 	proxyConfig.ForwardUrl = flag.String("proxy.forwardUrl", "", "url to forward requests to")
-	oidcConfig.IssuerUrl = flag.String("oidc.issuerUrl", "", "token issuer url")
-	oidcConfig.ClientId = flag.String("oidc.clientId", "", "service account client id")
-	oidcConfig.ClientSecret = flag.String("oidc.clientSecret", "", "service account client secret")
-	oidcConfig.Audience = flag.String("oidc.audience", "", "oid audience")
 	oidcConfig.Enabled = flag.Bool("oidc.enabled", false, "enable oidc authentication")
+	oidcConfig.Filename = flag.String("oidc.filename", "", "path to oidc configuration file")
 	tokenVerificationConfig.Url = flag.String("token.verification.url", "", "url to validate data plane tokens")
 	tokenVerificationConfig.Enabled = flag.Bool("token.verification.enabled", false, "enable data plane token verification")
 }

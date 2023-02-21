@@ -1,8 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/url"
+	"os"
 )
 
 type ProxyConfig struct {
@@ -12,11 +15,12 @@ type ProxyConfig struct {
 }
 
 type OIDCConfig struct {
-	IssuerUrl    *string
-	ClientId     *string
-	ClientSecret *string
-	Audience     *string
+	IssuerUrl    *string `json:"issuer_url"`
+	ClientId     *string `json:"client_id"`
+	ClientSecret *string `json:"client_secret"`
+	Audience     *string `json:"audience"`
 	Enabled      *bool
+	Filename     *string
 }
 
 type TokenVerificationConfig struct {
@@ -24,9 +28,18 @@ type TokenVerificationConfig struct {
 	Url     *string
 }
 
-func (c *OIDCConfig) Validate() {
+func (c *OIDCConfig) ReadAndValidate() {
 	if !*c.Enabled {
 		return
+	} else {
+		configFile, err := os.Open(*c.Filename)
+		if err != nil {
+			panic(err)
+		}
+		data, err := io.ReadAll(configFile)
+		if err == nil && data != nil {
+			err = json.Unmarshal(data, &*c)
+		}
 	}
 
 	if *c.IssuerUrl == "" {
