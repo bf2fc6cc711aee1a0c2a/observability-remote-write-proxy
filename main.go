@@ -4,10 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	_ "github.com/coreos/go-oidc"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	_ "github.com/prometheus/client_golang/prometheus/promhttp"
-	_ "golang.org/x/oauth2/clientcredentials"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,6 +15,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	_ "github.com/coreos/go-oidc"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	_ "github.com/prometheus/client_golang/prometheus/promhttp"
+	_ "golang.org/x/oauth2/clientcredentials"
 )
 
 var (
@@ -31,24 +32,28 @@ func main() {
 	flag.Parse()
 	err := oidcConfig.ReadAndValidate()
 	if err != nil {
-		panic(err)
+		log.Printf("Error reading and validating OIDC config: %v", err)
+		os.Exit(1)
 	}
 
 	upstreamUrl, err := url.Parse(*proxyConfig.ForwardUrl)
 	if err != nil {
-		panic(err)
+		log.Printf("Error parsing upstream url: %v", err)
+		os.Exit(1)
 	}
 
 	proxy, err := proxy.CreateProxy(upstreamUrl, &oidcConfig)
 	if err != nil {
-		panic(err)
+		log.Printf("Error creating proxy: %v", err)
+		os.Exit(1)
 	}
 
 	var parsedTokenVerificationUrl *url.URL
 	if *tokenVerificationConfig.Enabled {
 		parsedTokenVerificationUrl, err = url.Parse(*tokenVerificationConfig.Url)
 		if err != nil {
-			panic(err)
+			log.Printf("Error parsing token verification url: %v", err)
+			os.Exit(1)
 		}
 	}
 

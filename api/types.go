@@ -2,10 +2,11 @@ package api
 
 import (
 	"errors"
-	"gopkg.in/yaml.v3"
 	"io"
 	"net/url"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 type ProxyConfig struct {
@@ -39,7 +40,7 @@ func (c *OIDCConfig) ReadAndValidate() error {
 
 	configFile, err := os.Open(*c.Filename)
 	if err != nil {
-		return errors.New("error opening config file")
+		return err
 	}
 
 	data, err := io.ReadAll(configFile)
@@ -53,12 +54,12 @@ func (c *OIDCConfig) ReadAndValidate() error {
 	}
 
 	if *c.Attributes.IssuerURL == "" {
-		return errors.New("token issuer url required")
+		return err
 	}
 
 	_, err = url.Parse(*c.Attributes.IssuerURL)
 	if err != nil {
-		return errors.New("invalid token issuer url")
+		return err
 	}
 
 	if *c.Attributes.ClientSecret == "" || *c.Attributes.ClientID == "" {
