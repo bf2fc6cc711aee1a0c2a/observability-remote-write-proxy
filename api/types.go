@@ -1,8 +1,8 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
+	"gopkg.in/yaml.v3"
 	"io"
 	"net/url"
 	"os"
@@ -15,12 +15,16 @@ type ProxyConfig struct {
 }
 
 type OIDCConfig struct {
-	IssuerUrl    *string `json:"issuer_url"`
-	ClientId     *string `json:"client_id"`
-	ClientSecret *string `json:"client_secret"`
-	Audience     *string `json:"audience"`
-	Enabled      *bool
-	Filename     *string
+	Enabled    *bool
+	Filename   *string
+	Attributes OIDCAttributes
+}
+
+type OIDCAttributes struct {
+	IssuerURL    *string `yaml:"issuer_url"`
+	ClientID     *string `yaml:"client_id"`
+	ClientSecret *string `yaml:"client_secret"`
+	Audience     *string `yaml:"audience"`
 }
 
 type TokenVerificationConfig struct {
@@ -28,30 +32,37 @@ type TokenVerificationConfig struct {
 	Url     *string
 }
 
-func (c *OIDCConfig) ReadAndValidate() {
+func (c *OIDCConfig) ReadAndValidate() error {
 	if !*c.Enabled {
-		return
-	} else {
-		configFile, err := os.Open(*c.Filename)
-		if err != nil {
-			panic(err)
-		}
-		data, err := io.ReadAll(configFile)
-		if err == nil && data != nil {
-			err = json.Unmarshal(data, &*c)
-		}
+		return nil
 	}
 
-	if *c.IssuerUrl == "" {
-		panic(errors.New("token issuer url required"))
-	}
-
-	_, err := url.Parse(*c.IssuerUrl)
+	configFile, err := os.Open(*c.Filename)
 	if err != nil {
-		panic(err)
+		return errors.New("error opening config file")
 	}
 
-	if *c.ClientSecret == "" || *c.ClientId == "" {
-		panic(errors.New("client id and secret are required"))
+	data, err := io.ReadAll(configFile)
+	if err != nil {
+		return err
 	}
+
+	err = yaml.Unmarshal(data, c)
+	if err != nil {
+		return err
+	}
+
+	if *c.Attributes.IssuerURL == "" {
+		return errors.New("token issuer url required")
+	}
+
+	_, err = url.Parse(*c.Attributes.IssuerURL)
+	if err != nil {
+		return errors.New("invalid token issuer url")
+	}
+
+	if *c.Attributes.ClientSecret == "" || *c.Attributes.ClientID == "" {
+		return errors.New("client id and secret are required")
+	}
+	return nil
 }

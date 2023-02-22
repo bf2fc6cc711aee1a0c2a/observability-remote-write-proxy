@@ -29,7 +29,10 @@ var (
 
 func main() {
 	flag.Parse()
-	oidcConfig.ReadAndValidate()
+	err := oidcConfig.ReadAndValidate()
+	if err != nil {
+		panic(err)
+	}
 
 	upstreamUrl, err := url.Parse(*proxyConfig.ForwardUrl)
 	if err != nil {
