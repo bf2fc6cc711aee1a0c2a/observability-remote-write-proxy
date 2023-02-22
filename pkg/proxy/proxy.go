@@ -5,6 +5,7 @@ import (
 	"github.com/coreos/go-oidc"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -63,6 +64,7 @@ func CreateProxy(upstreamUrl *url.URL, oidcConfig *api.OIDCConfig) (*httputil.Re
 			Base:   rt,
 		}
 	} else {
+		log.Println("oidc authentication is disabled")
 		proxy.Transport = rt
 	}
 

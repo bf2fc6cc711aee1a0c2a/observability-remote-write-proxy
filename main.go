@@ -47,6 +47,8 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+	} else {
+		log.Println("auth token verification is disabled")
 	}
 
 	metricsServer := http.Server{
@@ -85,7 +87,7 @@ func main() {
 				// validate the cluster ids contained in the remote write request
 				clusterId, err := remotewrite.ValidateRequest(remoteWriteRequest)
 				if err != nil {
-					log.Printf("error validating the remote write request: %v", err)
+					log.Printf("error validating remote write request: %v", err)
 					w.WriteHeader(http.StatusForbidden)
 					return
 				}
@@ -95,10 +97,12 @@ func main() {
 					if token != "" {
 						err = authtoken.ValidateToken(parsedTokenVerificationUrl, clusterId, token)
 						if err != nil {
+							log.Printf("error validating auth token: %v", err)
 							w.WriteHeader(http.StatusUnauthorized)
 							return
 						}
 					} else {
+						log.Println("missing auth token in incoming request")
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
@@ -135,13 +139,13 @@ func main() {
 
 func init() {
 	proxyConfig.ProxyPort = flag.Int("proxy.listen.port", 8080, "port on which the proxy listens for incoming requests")
-	proxyConfig.MetricsPort = flag.Int("proxy.metrics.port", 9090, "port on which proxy metrics are exposed")
-	proxyConfig.ForwardUrl = flag.String("proxy.forwardUrl", "", "url to forward requests to")
-	oidcConfig.IssuerUrl = flag.String("oidc.issuerUrl", "", "token issuer url")
-	oidcConfig.ClientId = flag.String("oidc.clientId", "", "service account client id")
-	oidcConfig.ClientSecret = flag.String("oidc.clientSecret", "", "service account client secret")
-	oidcConfig.Audience = flag.String("oidc.audience", "", "oid audience")
-	oidcConfig.Enabled = flag.Bool("oidc.enabled", false, "enable oidc authentication")
-	tokenVerificationConfig.Url = flag.String("token.verification.url", "", "url to validate data plane tokens")
-	tokenVerificationConfig.Enabled = flag.Bool("token.verification.enabled", false, "enable data plane token verification")
+	proxyConfig.MetricsPort = flag.Int("proxy.metrics.port", 9090, "port on which proxies own metrics are exposed")
+	proxyConfig.ForwardUrl = flag.String("proxy.forwardUrl", "", "url to forward requests to after successful validation")
+	oidcConfig.IssuerUrl = flag.String("oidc.issuerUrl", "", "url of the token issuer for outgoing requests")
+	oidcConfig.ClientId = flag.String("oidc.clientId", "", "client ID used to fetch tokens for outgoing requests")
+	oidcConfig.ClientSecret = flag.String("oidc.clientSecret", "", "client secret used to fetch tokens for outgoing requests")
+	oidcConfig.Audience = flag.String("oidc.audience", "", "oid audience sent to the token issuer")
+	oidcConfig.Enabled = flag.Bool("oidc.enabled", false, "enable token authentication for outgoing requests")
+	tokenVerificationConfig.Url = flag.String("token.verification.url", "", "url to validate cluster IDs and tokens of incoming requests")
+	tokenVerificationConfig.Enabled = flag.Bool("token.verification.enabled", false, "enable validating cluster IDs and tokens of incoming requests")
 }
