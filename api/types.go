@@ -2,11 +2,10 @@ package api
 
 import (
 	"errors"
+	"gopkg.in/yaml.v3"
 	"io"
 	"net/url"
 	"os"
-
-	"gopkg.in/yaml.v3"
 )
 
 type ProxyConfig struct {
@@ -44,7 +43,7 @@ func (c *OIDCConfig) Read() error {
 		return err
 	}
 
-	err = yaml.Unmarshal(data, c)
+	err = yaml.Unmarshal(data, &c.Attributes)
 	if err != nil {
 		return err
 	}
