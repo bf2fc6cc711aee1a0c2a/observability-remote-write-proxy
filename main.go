@@ -30,7 +30,7 @@ var (
 
 func main() {
 	flag.Parse()
-	err := oidcConfig.ReadAndValidate()
+	err := oidcConfig.Validate()
 	if err != nil {
 		log.Printf("Error reading and validating OIDC config: %v", err)
 		os.Exit(1)

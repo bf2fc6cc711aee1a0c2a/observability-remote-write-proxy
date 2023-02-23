@@ -22,10 +22,10 @@ type OIDCConfig struct {
 }
 
 type OIDCAttributes struct {
-	IssuerURL    *string `yaml:"issuer_url"`
-	ClientID     *string `yaml:"client_id"`
-	ClientSecret *string `yaml:"client_secret"`
-	Audience     *string `yaml:"audience"`
+	IssuerURL    string `yaml:"issuer_url"`
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	Audience     string `yaml:"audience"`
 }
 
 type TokenVerificationConfig struct {
@@ -33,11 +33,7 @@ type TokenVerificationConfig struct {
 	Url     *string
 }
 
-func (c *OIDCConfig) ReadAndValidate() error {
-	if !*c.Enabled {
-		return nil
-	}
-
+func (c *OIDCConfig) Read() error {
 	configFile, err := os.Open(*c.Filename)
 	if err != nil {
 		return err
@@ -53,16 +49,29 @@ func (c *OIDCConfig) ReadAndValidate() error {
 		return err
 	}
 
-	if *c.Attributes.IssuerURL == "" {
-		return err
+	return nil
+}
+
+func (c *OIDCConfig) Validate() error {
+	if !*c.Enabled {
+		return nil
 	}
 
-	_, err = url.Parse(*c.Attributes.IssuerURL)
+	err := c.Read()
 	if err != nil {
 		return err
 	}
 
-	if *c.Attributes.ClientSecret == "" || *c.Attributes.ClientID == "" {
+	if c.Attributes.IssuerURL == "" {
+		return err
+	}
+
+	_, err = url.Parse(c.Attributes.IssuerURL)
+	if err != nil {
+		return err
+	}
+
+	if c.Attributes.ClientSecret == "" || c.Attributes.ClientID == "" {
 		return errors.New("client id and secret are required")
 	}
 	return nil

@@ -42,20 +42,20 @@ func CreateProxy(upstreamUrl *url.URL, oidcConfig *api.OIDCConfig) (*httputil.Re
 	}
 
 	if *oidcConfig.Enabled {
-		provider, err := oidc.NewProvider(context.Background(), *oidcConfig.Attributes.IssuerURL)
+		provider, err := oidc.NewProvider(context.Background(), oidcConfig.Attributes.IssuerURL)
 		if err != nil {
 			return nil, err
 		}
 
 		var cfg = clientcredentials.Config{
-			ClientID:     *oidcConfig.Attributes.ClientID,
-			ClientSecret: *oidcConfig.Attributes.ClientSecret,
+			ClientID:     oidcConfig.Attributes.ClientID,
+			ClientSecret: oidcConfig.Attributes.ClientSecret,
 			TokenURL:     provider.Endpoint().TokenURL,
 		}
 
-		if *oidcConfig.Attributes.Audience != "" {
+		if oidcConfig.Attributes.Audience != "" {
 			cfg.EndpointParams = map[string][]string{
-				"audience": {*oidcConfig.Attributes.Audience},
+				"audience": {oidcConfig.Attributes.Audience},
 			}
 		}
 
