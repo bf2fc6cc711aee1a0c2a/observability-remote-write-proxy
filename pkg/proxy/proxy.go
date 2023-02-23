@@ -2,14 +2,15 @@ package proxy
 
 import (
 	"context"
-	"github.com/coreos/go-oidc"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/clientcredentials"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"observability-remote-write-proxy/api"
 	"observability-remote-write-proxy/pkg/metrics"
+
+	"github.com/coreos/go-oidc"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 const (
@@ -41,20 +42,20 @@ func CreateProxy(upstreamUrl *url.URL, oidcConfig *api.OIDCConfig) (*httputil.Re
 	}
 
 	if *oidcConfig.Enabled {
-		provider, err := oidc.NewProvider(context.Background(), *oidcConfig.IssuerUrl)
+		provider, err := oidc.NewProvider(context.Background(), oidcConfig.Attributes.IssuerURL)
 		if err != nil {
 			return nil, err
 		}
 
 		var cfg = clientcredentials.Config{
-			ClientID:     *oidcConfig.ClientId,
-			ClientSecret: *oidcConfig.ClientSecret,
+			ClientID:     oidcConfig.Attributes.ClientID,
+			ClientSecret: oidcConfig.Attributes.ClientSecret,
 			TokenURL:     provider.Endpoint().TokenURL,
 		}
 
-		if *oidcConfig.Audience != "" {
+		if oidcConfig.Attributes.Audience != "" {
 			cfg.EndpointParams = map[string][]string{
-				"audience": {*oidcConfig.Audience},
+				"audience": {oidcConfig.Attributes.Audience},
 			}
 		}
 

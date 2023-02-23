@@ -4,10 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	_ "github.com/coreos/go-oidc"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	_ "github.com/prometheus/client_golang/prometheus/promhttp"
-	_ "golang.org/x/oauth2/clientcredentials"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,6 +15,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	_ "github.com/coreos/go-oidc"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	_ "github.com/prometheus/client_golang/prometheus/promhttp"
+	_ "golang.org/x/oauth2/clientcredentials"
 )
 
 var (
@@ -29,23 +30,30 @@ var (
 
 func main() {
 	flag.Parse()
-	oidcConfig.Validate()
+	err := oidcConfig.Validate()
+	if err != nil {
+		log.Printf("Error reading and validating OIDC config: %v", err)
+		os.Exit(1)
+	}
 
 	upstreamUrl, err := url.Parse(*proxyConfig.ForwardUrl)
 	if err != nil {
-		panic(err)
+		log.Printf("Error parsing upstream url: %v", err)
+		os.Exit(1)
 	}
 
 	proxy, err := proxy.CreateProxy(upstreamUrl, &oidcConfig)
 	if err != nil {
-		panic(err)
+		log.Printf("Error creating proxy: %v", err)
+		os.Exit(1)
 	}
 
 	var parsedTokenVerificationUrl *url.URL
 	if *tokenVerificationConfig.Enabled {
 		parsedTokenVerificationUrl, err = url.Parse(*tokenVerificationConfig.Url)
 		if err != nil {
-			panic(err)
+			log.Printf("Error parsing token verification url: %v", err)
+			os.Exit(1)
 		}
 	}
 
@@ -137,11 +145,8 @@ func init() {
 	proxyConfig.ProxyPort = flag.Int("proxy.listen.port", 8080, "port on which the proxy listens for incoming requests")
 	proxyConfig.MetricsPort = flag.Int("proxy.metrics.port", 9090, "port on which proxy metrics are exposed")
 	proxyConfig.ForwardUrl = flag.String("proxy.forwardUrl", "", "url to forward requests to")
-	oidcConfig.IssuerUrl = flag.String("oidc.issuerUrl", "", "token issuer url")
-	oidcConfig.ClientId = flag.String("oidc.clientId", "", "service account client id")
-	oidcConfig.ClientSecret = flag.String("oidc.clientSecret", "", "service account client secret")
-	oidcConfig.Audience = flag.String("oidc.audience", "", "oid audience")
 	oidcConfig.Enabled = flag.Bool("oidc.enabled", false, "enable oidc authentication")
+	oidcConfig.Filename = flag.String("oidc.filename", "", "path to oidc configuration file")
 	tokenVerificationConfig.Url = flag.String("token.verification.url", "", "url to validate data plane tokens")
 	tokenVerificationConfig.Enabled = flag.Bool("token.verification.enabled", false, "enable data plane token verification")
 }
