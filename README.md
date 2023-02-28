@@ -5,10 +5,10 @@
 ## **How to set up the Proxy locally**
 
 #### Flags that are needed to proxy to another prometheus instance:
---proxy.forwardUrl=LOCALHOST_URL
+--proxy.forwardUrl=<Prometheus remote write URL>
 
 #### Flags that are needed for full functionality:
---proxy.forwardUrl=LOCALHOST_URL --oidc.enabled --proxy.forwardUrl=OBSERVATORIUM_FORWARD_URL --oidc.issuerUrl=OIDC_ISSUER_URL --oidc.clientId=OIDC_CLIENT_ID --oidc.clientSecret=OIDC_CLIENT_SECRET --oidc.audience=OIDC_AUDIENCE --token.verification.enabled --token.verification.url=TOKEN_VERIFICATION_URL
+--proxy.forwardUrl=<Prometheus remote write URL> --oidc.enabled --proxy.forwardUrl=<Observatorium Forward URL> --oidc.issuerUrl=<OIDC Issuer URL> --oidc.clientId=<OIDC Client ID> --oidc.clientSecret=<OIDC Client Secret> --oidc.audience=<OIDC Audience> --token.verification.enabled --token.verification.url=<Token Verification URL>
 
 #### Steps:
 1. Run the script to start the Prometheus containers (environment.sh)
