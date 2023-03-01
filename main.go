@@ -76,6 +76,7 @@ func main() {
 
 				// POST / is the only accepted endpoint for incoming write requests
 				if r.Method != http.MethodPost || r.URL.Path != "/" {
+					log.Println("invalid proxy request, method must be POST and path must be /")
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
@@ -93,20 +94,24 @@ func main() {
 				// validate the cluster ids contained in the remote write request
 				clusterId, err := remotewrite.ValidateRequest(remoteWriteRequest)
 				if err != nil {
-					log.Printf("error validating the remote write request: %v", err)
+					log.Printf("error validating remote write request: %v", err)
 					w.WriteHeader(http.StatusForbidden)
 					return
 				}
+
+				log.Println(fmt.Sprintf("remote write request received from %v", clusterId))
 
 				if *tokenVerificationConfig.Enabled {
 					token := authtoken.GetAuthenticationToken(r)
 					if token != "" {
 						err = authtoken.ValidateToken(parsedTokenVerificationUrl, clusterId, token)
 						if err != nil {
+							log.Println(fmt.Sprintf("error validating auth token from %v: %v", clusterId, err.Error()))
 							w.WriteHeader(http.StatusUnauthorized)
 							return
 						}
 					} else {
+						log.Println(fmt.Sprintf("auth token missing in request from %v", clusterId))
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
@@ -115,7 +120,7 @@ func main() {
 				// copy the remote write request back onto the http request
 				err = remotewrite.PopulateRequestBody(remoteWriteRequest, r)
 				if err != nil {
-					log.Printf("error copying remote write request: %v", err)
+					log.Printf("error copying remote write request from %v: %v", clusterId, err)
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
