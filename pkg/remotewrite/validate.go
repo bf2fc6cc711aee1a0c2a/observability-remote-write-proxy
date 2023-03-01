@@ -26,8 +26,6 @@ func FindClusterIDs(req *prometheus.WriteRequest) map[string]int {
 
 // ValidateRequest validates a remote write request
 func ValidateRequest(remoteWriteRequest *prometheus.WriteRequest) (string, error) {
-	log.Printf("there are %v time series in the request", len(remoteWriteRequest.Timeseries))
-
 	clusterIDs := FindClusterIDs(remoteWriteRequest)
 	if len(clusterIDs) > 1 {
 		msg := fmt.Sprintf("request contains multiple cluster IDs: %v", clusterIDs)
