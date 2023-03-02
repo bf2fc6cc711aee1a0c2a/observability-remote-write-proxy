@@ -62,6 +62,11 @@ func main() {
 		Handler: promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}),
 	}
 
+	tokenVerifier, err := authtoken.NewDefaultTokenVerifier(tokenVerificationConfig)
+	if err != nil {
+		log.Printf("Error creating token verifier: %v", err)
+	}
+
 	proxyServer := http.Server{
 		Addr: fmt.Sprintf("0.0.0.0:%v", *proxyConfig.ProxyPort),
 		Handler: struct {
@@ -101,10 +106,10 @@ func main() {
 
 				log.Println(fmt.Sprintf("remote write request received from %v", clusterId))
 
-				if *tokenVerificationConfig.Enabled {
-					token := authtoken.GetAuthenticationToken(r)
+				if tokenVerifier.Enabled() {
+					token := tokenVerifier.GetAuthenticationToken(r)
 					if token != "" {
-						err = authtoken.ValidateToken(parsedTokenVerificationUrl, clusterId, token)
+						err = tokenVerifier.ValidateToken(parsedTokenVerificationUrl, clusterId, token)
 						if err != nil {
 							log.Println(fmt.Sprintf("error validating auth token from %v: %v", clusterId, err.Error()))
 							w.WriteHeader(http.StatusUnauthorized)
