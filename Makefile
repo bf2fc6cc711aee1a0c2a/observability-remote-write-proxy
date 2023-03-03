@@ -1,6 +1,6 @@
-REGISTRY=quay.io/rhoas
-IMAGE_NAME=observability-remote-write-proxy
-VERSION=$$(git rev-parse --short=7 HEAD)
+REGISTRY ?= quay.io/rhoas
+IMAGE_NAME ?= observability-remote-write-proxy
+VERSION ?= "$$(git rev-parse --short=7 HEAD)"
 
 docker/login:
 	docker --config=${DOCKER_CONFIG} login -u ${QUAY_USER} -p ${QUAY_TOKEN} quay.io

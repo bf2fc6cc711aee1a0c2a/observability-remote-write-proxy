@@ -30,21 +30,27 @@ var (
 
 func main() {
 	flag.Parse()
-	err := oidcConfig.Validate()
+	err := initializeTokenVerificationConfig(tokenVerificationConfig)
 	if err != nil {
-		log.Printf("Error reading and validating OIDC config: %v", err)
+		log.Printf("error initializing token verification config: %s", err)
+		os.Exit(1)
+	}
+
+	err = oidcConfig.Validate()
+	if err != nil {
+		log.Printf("error reading and validating OIDC config: %v", err)
 		os.Exit(1)
 	}
 
 	upstreamUrl, err := url.Parse(*proxyConfig.ForwardUrl)
 	if err != nil {
-		log.Printf("Error parsing upstream url: %v", err)
+		log.Printf("error parsing upstream url: %v", err)
 		os.Exit(1)
 	}
 
 	proxy, err := proxy.CreateProxy(upstreamUrl, &oidcConfig)
 	if err != nil {
-		log.Printf("Error creating proxy: %v", err)
+		log.Printf("error creating proxy: %v", err)
 		os.Exit(1)
 	}
 
@@ -52,7 +58,7 @@ func main() {
 	if *tokenVerificationConfig.Enabled {
 		parsedTokenVerificationUrl, err = url.Parse(*tokenVerificationConfig.Url)
 		if err != nil {
-			log.Printf("Error parsing token verification url: %v", err)
+			log.Printf("error parsing token verification url: %v", err)
 			os.Exit(1)
 		}
 	}
@@ -62,9 +68,15 @@ func main() {
 		Handler: promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}),
 	}
 
-	tokenVerifier, err := authtoken.NewDefaultTokenVerifier(tokenVerificationConfig)
+	tokenVerifierOptions, err := buildTokenVerifierOptions(tokenVerificationConfig)
 	if err != nil {
-		log.Printf("Error creating token verifier: %v", err)
+		log.Printf("error building token verifier options: %v", err)
+		os.Exit(1)
+	}
+	tokenVerifier, err := authtoken.NewDefaultTokenVerifier(tokenVerifierOptions)
+	if err != nil {
+		log.Printf("error creating token verifier: %v", err)
+		os.Exit(1)
 	}
 
 	proxyServer := http.Server{
@@ -151,6 +163,41 @@ func main() {
 	<-ctx.Done()
 }
 
+func initializeTokenVerificationConfig(config api.TokenVerificationConfig) error {
+	if *config.CACertEnabled {
+		reader, err := os.Open(*tokenVerificationConfig.CACertFilePath)
+		if err != nil {
+			return err
+		}
+		tokenVerificationConfig.CACertReader = reader
+	}
+
+	return nil
+}
+
+func buildTokenVerifierOptions(config api.TokenVerificationConfig) (authtoken.TokenVerifierOptions, error) {
+	var options authtoken.TokenVerifierOptions
+	if *config.Enabled {
+		options.Enabled = true
+		parsedURL, err := url.Parse(*tokenVerificationConfig.Url)
+		if err != nil {
+			return options, fmt.Errorf("error parsing token verification url: %v", err)
+		}
+		options.URL = *parsedURL
+	}
+
+	if *config.CACertEnabled {
+		caCertRawBytes, err := config.ReadCACert()
+		if err != nil {
+			return options, fmt.Errorf("error reading token verification CA Certificate: %v", err)
+		}
+		options.CACertEnabled = true
+		options.CACertRaw = caCertRawBytes
+	}
+
+	return options, nil
+}
+
 func init() {
 	proxyConfig.ProxyPort = flag.Int("proxy.listen.port", 8080, "port on which the proxy listens for incoming requests")
 	proxyConfig.MetricsPort = flag.Int("proxy.metrics.port", 9090, "port on which proxy metrics are exposed")
@@ -159,4 +206,6 @@ func init() {
 	oidcConfig.Filename = flag.String("oidc.filename", "", "path to oidc configuration file")
 	tokenVerificationConfig.Url = flag.String("token.verification.url", "", "url to validate data plane tokens")
 	tokenVerificationConfig.Enabled = flag.Bool("token.verification.enabled", false, "enable data plane token verification")
+	tokenVerificationConfig.CACertEnabled = flag.Bool("token.verification.cacert.enabled", false, "If enabled, the CA certificate provided in -token.verification.cacert.filepath will be appended to the trusted CAs store when performing token verification")
+	tokenVerificationConfig.CACertFilePath = flag.String("token.verification.cacert.filename", "", "The CA certificate file path. See -token.verification.cacert.enabled for more information. If -token.verification.cacert.enabled it not set or set to false it is not used")
 }
