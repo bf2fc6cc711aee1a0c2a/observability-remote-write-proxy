@@ -2,10 +2,11 @@ package api
 
 import (
 	"errors"
-	"gopkg.in/yaml.v3"
 	"io"
 	"net/url"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 type ProxyConfig struct {
@@ -28,8 +29,23 @@ type OIDCAttributes struct {
 }
 
 type TokenVerificationConfig struct {
-	Enabled *bool
-	Url     *string
+	Enabled        *bool
+	Url            *string
+	CACertEnabled  *bool
+	CACertFilePath *string
+
+	CACertReader io.Reader
+}
+
+func (c *TokenVerificationConfig) ReadCACert() ([]byte, error) {
+	var caCertRawBytes []byte
+	data, err := io.ReadAll(c.CACertReader)
+	if err != nil {
+		return nil, err
+	}
+	caCertRawBytes = data
+
+	return caCertRawBytes, nil
 }
 
 func (c *OIDCConfig) Read() error {

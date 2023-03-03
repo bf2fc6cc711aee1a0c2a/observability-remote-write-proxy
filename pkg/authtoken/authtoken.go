@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"observability-remote-write-proxy/api"
 	"path"
 	"time"
 )
@@ -16,28 +15,47 @@ const (
 	httpAuthorizationHeader = "Authorization"
 )
 
+// CACertificate represents the content
+// of a CA certificate
+type CAPEMCertificateRawBytes []byte
+
+func (c *CAPEMCertificateRawBytes) ToByteSlice() []byte {
+	return []byte(*c)
+}
+
+func ToCAPEMCertificateRawBytes(certRawBytes []byte) CAPEMCertificateRawBytes {
+	return CAPEMCertificateRawBytes(certRawBytes)
+}
+
+type TokenVerifierOptions struct {
+	Enabled       bool
+	URL           url.URL
+	CACertEnabled bool
+	CACertRaw     CAPEMCertificateRawBytes
+}
+
 type TokenVerifier struct {
-	client *http.Client
-	config api.TokenVerificationConfig
+	client  http.Client
+	options TokenVerifierOptions
 }
 
-func NewTokenVerifier(client *http.Client, config api.TokenVerificationConfig) TokenVerifier {
-	return TokenVerifier{
-		client: client,
-		config: config,
-	}
-}
-
-func NewDefaultTokenVerifier(config api.TokenVerificationConfig) (TokenVerifier, error) {
-	client, err := defaultHTTPClient()
+func NewDefaultTokenVerifier(options TokenVerifierOptions) (TokenVerifier, error) {
+	client, err := defaultHTTPClient(options)
 	if err != nil {
 		return TokenVerifier{}, err
 	}
-	return NewTokenVerifier(&client, config), nil
+	return newTokenVerifier(client, options), nil
+}
+
+func newTokenVerifier(client http.Client, options TokenVerifierOptions) TokenVerifier {
+	return TokenVerifier{
+		client:  client,
+		options: options,
+	}
 }
 
 func (t *TokenVerifier) Enabled() bool {
-	return t.config.Enabled != nil && *t.config.Enabled
+	return t.options.Enabled
 }
 
 func (t *TokenVerifier) GetAuthenticationToken(r *http.Request) string {
@@ -69,26 +87,34 @@ func (t *TokenVerifier) ValidateToken(url *url.URL, clusterID string, token stri
 	return nil
 }
 
-func defaultTLSConfig() (tls.Config, error) {
+func defaultTLSConfig(options TokenVerifierOptions) (tls.Config, error) {
+	var tlsConfig tls.Config
+	if !options.CACertEnabled {
+		return tlsConfig, nil
+	}
+
 	// We get the system's certificate pool
 	rootCAs, err := x509.SystemCertPool()
 	if err != nil {
 		return tls.Config{}, nil
 	}
 
-	tlsConfig := tls.Config{
-		RootCAs: rootCAs,
+	// Append the CA cert to the system's certificate pool
+	if ok := rootCAs.AppendCertsFromPEM(options.CACertRaw); !ok {
+		return tls.Config{}, fmt.Errorf("failed to parse token verifier CA Certificate as a PEM encoded certificate")
 	}
+
+	tlsConfig.RootCAs = rootCAs
 
 	return tlsConfig, nil
 }
 
-func defaultTransport() (http.RoundTripper, error) {
+func defaultTransport(options TokenVerifierOptions) (http.RoundTripper, error) {
 	// our default transport is a clone of http.DefaultTranport to
 	// which we add some customizations
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 
-	tlsConfig, err := defaultTLSConfig()
+	tlsConfig, err := defaultTLSConfig(options)
 	if err != nil {
 		return nil, err
 	}
@@ -98,8 +124,8 @@ func defaultTransport() (http.RoundTripper, error) {
 	return transport, nil
 }
 
-func defaultHTTPClient() (http.Client, error) {
-	transport, err := defaultTransport()
+func defaultHTTPClient(options TokenVerifierOptions) (http.Client, error) {
+	transport, err := defaultTransport(options)
 	if err != nil {
 		return http.Client{}, err
 	}
