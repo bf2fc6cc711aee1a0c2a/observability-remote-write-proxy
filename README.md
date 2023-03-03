@@ -7,14 +7,24 @@ A proxy to accept remote write requests and forward them to Observatorium. Befor
 
 Flags:
 ```
---proxy.forwardUrl - Prometheus remote write URL (required)
---oidc.enabled - Enables the OIDC configuration (optional)
---oidc.issuerUrl - Token issuer URL (required if oidc.enabled is true)
---oidc.clientId - Service Account Client ID (required if oidc.enabled is true)
---oidc.clientSecret - Service Account Client Secret (required if oidc.enabled is true)
---oidc.audience - OID Audience (optional if oidc.enabled is true)
---token.verification.enabled - Enables data plane token verification (optional)
---token.verification.url - URL to validate data plane tokens (required if token.verification.enabled is true)
+  -oidc.enabled
+    	enable oidc authentication
+  -oidc.filename string
+    	path to oidc configuration file
+  -proxy.forwardUrl string
+    	url to forward requests to
+  -proxy.listen.port int
+    	port on which the proxy listens for incoming requests (default 8080)
+  -proxy.metrics.port int
+    	port on which proxy metrics are exposed (default 9090)
+  -token.verification.cacert.enabled
+    	If enabled, the CA certificate provided in -token.verification.cacert.filepath will be appended to the trusted CAs store when performing token verification
+  -token.verification.cacert.filename string
+    	The CA certificate file path. See -token.verification.cacert.enabled for more information. If -token.verification.cacert.enabled it not set or set to false it is not used
+  -token.verification.enabled
+    	enable data plane token verification
+  -token.verification.url string
+    	url to validate data plane tokens
 ```
 
 Flags that are needed to proxy to another prometheus instance:
