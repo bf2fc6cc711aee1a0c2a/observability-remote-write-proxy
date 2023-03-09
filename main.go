@@ -109,36 +109,41 @@ func main() {
 					return
 				}
 
-				// validate the cluster ids contained in the remote write request
-				clusterId, err := remotewrite.ValidateRequest(remoteWriteRequest)
-				if err != nil {
-					log.Printf("error validating remote write request: %v", err)
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
+				clusterID := ""
+				if !remotewrite.IsMetadataRequest(remoteWriteRequest) {
+					// validate the cluster ids contained in the remote write request
+					clusterID, err = remotewrite.ValidateRequest(remoteWriteRequest)
+					if err != nil {
+						log.Printf("error validating remote write request: %v", err)
+						w.WriteHeader(http.StatusForbidden)
+						return
+					}
 
-				log.Println(fmt.Sprintf("remote write request received from %v", clusterId))
+					log.Println(fmt.Sprintf("remote write request received from '%v'", clusterID))
 
-				if tokenVerifier.Enabled() {
-					token := tokenVerifier.GetAuthenticationToken(r)
-					if token != "" {
-						err = tokenVerifier.ValidateToken(parsedTokenVerificationUrl, clusterId, token)
+					if tokenVerifier.Enabled() {
+						token := tokenVerifier.GetAuthenticationToken(r)
+						if token == "" {
+							log.Println(fmt.Sprintf("auth token missing in request from '%v'", clusterID))
+							w.WriteHeader(http.StatusBadRequest)
+							return
+						}
+
+						err = tokenVerifier.ValidateToken(parsedTokenVerificationUrl, clusterID, token)
 						if err != nil {
-							log.Println(fmt.Sprintf("error validating auth token from %v: %v", clusterId, err.Error()))
+							log.Println(fmt.Sprintf("error validating auth token from '%v': %v", clusterID, err.Error()))
 							w.WriteHeader(http.StatusUnauthorized)
 							return
 						}
-					} else {
-						log.Println(fmt.Sprintf("auth token missing in request from %v", clusterId))
-						w.WriteHeader(http.StatusBadRequest)
-						return
 					}
+				} else {
+					log.Println("metadata request received, checks skipped")
 				}
 
 				// copy the remote write request back onto the http request
 				err = remotewrite.PopulateRequestBody(remoteWriteRequest, r)
 				if err != nil {
-					log.Printf("error copying remote write request from %v: %v", clusterId, err)
+					log.Printf("error copying remote write request from '%v': %v", clusterID, err)
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}

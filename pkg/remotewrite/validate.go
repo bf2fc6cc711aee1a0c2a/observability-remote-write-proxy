@@ -24,6 +24,10 @@ func FindClusterIDs(req *prometheus.WriteRequest) map[string]int {
 	return clusterID
 }
 
+func IsMetadataRequest(remoteWriteRequest *prometheus.WriteRequest) bool {
+	return remoteWriteRequest != nil && len(remoteWriteRequest.GetTimeseries()) == 0 && len(remoteWriteRequest.GetMetadata()) != 0
+}
+
 // ValidateRequest validates a remote write request
 func ValidateRequest(remoteWriteRequest *prometheus.WriteRequest) (string, error) {
 	clusterIDs := FindClusterIDs(remoteWriteRequest)
