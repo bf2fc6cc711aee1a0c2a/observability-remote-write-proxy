@@ -37,5 +37,5 @@ func ValidateRequest(remoteWriteRequest *prometheus.WriteRequest) (string, error
 		return key, nil
 	}
 
-	return "", errors.New("request does not contain any cluster ids")
+	return "", fmt.Errorf("request does not contain any cluster ids: %v", remoteWriteRequest)
 }

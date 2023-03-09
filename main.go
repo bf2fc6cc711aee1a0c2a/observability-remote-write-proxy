@@ -93,7 +93,8 @@ func main() {
 
 				// POST / is the only accepted endpoint for incoming write requests
 				if r.Method != http.MethodPost || r.URL.Path != "/" {
-					log.Println("invalid proxy request, method must be POST and path must be /")
+					log.Println(fmt.Sprintf("invalid proxy request, method must be POST and path must be /, but got method %v and path %v",
+						r.Method, r.URL.Path))
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
