@@ -1,9 +1,10 @@
 package remotewrite
 
 import (
+	"testing"
+
 	"github.com/onsi/gomega"
 	"go.buf.build/protocolbuffers/go/prometheus/prometheus"
-	"testing"
 )
 
 var (
@@ -57,6 +58,13 @@ var (
 	}
 	req = &prometheus.WriteRequest{
 		Timeseries: []*prometheus.TimeSeries{},
+	}
+	metadataReq = &prometheus.WriteRequest{
+		Metadata: []*prometheus.MetricMetadata{
+			{
+				MetricFamilyName: "test",
+			},
+		},
 	}
 )
 
@@ -114,6 +122,86 @@ func TestFindClusterIDs(t *testing.T) {
 			t.Parallel()
 			g := gomega.NewWithT(t)
 			g.Expect(FindClusterIDs(tt.args.request)).To(gomega.Equal(tt.want))
+		})
+	}
+}
+
+func TestValidateRequest(t *testing.T) {
+	type args struct {
+		remoteWriteRequest *prometheus.WriteRequest
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "should return an error if there are multiple cluster IDs in the request",
+			args: args{
+				remoteWriteRequest: reqWithMultipleClusterID,
+			},
+			wantErr: true,
+		},
+		{
+			name: "should return an error if there are no cluster IDs in the request",
+			args: args{
+				remoteWriteRequest: req,
+			},
+			wantErr: true,
+		},
+		{
+			name: "should succeed if there is one cluster ID in the request",
+			args: args{
+				remoteWriteRequest: reqWithOneClusterID,
+			},
+			want:    "cluster-1",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ValidateRequest(tt.args.remoteWriteRequest)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateRequest() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("ValidateRequest() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsMetadataRequest(t *testing.T) {
+	type args struct {
+		remoteWriteRequest *prometheus.WriteRequest
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "should return false if the request is not a metadata request",
+			args: args{
+				remoteWriteRequest: reqWithOneClusterID,
+			},
+			want: false,
+		},
+		{
+			name: "should return true if the request is a metadata request",
+			args: args{
+				remoteWriteRequest: metadataReq,
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsMetadataRequest(tt.args.remoteWriteRequest); got != tt.want {
+				t.Errorf("IsMetadataRequest() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
